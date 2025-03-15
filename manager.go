@@ -75,7 +75,6 @@ func (msm *McServerManager) loadServers() error {
 				errs = append(errs, fmt.Errorf("failer creating process for %s: %w", serverJSON.Name, err))
 				break
 			}
-			proc.InheritConsole(false)
 				
 			msm.Servers[serverJSON.Name] = msm.NewMcServer(&serverJSON, proc, port)
 			break
