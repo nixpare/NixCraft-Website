@@ -4,17 +4,17 @@ go 1.23.2
 
 require (
 	github.com/coder/websocket v1.8.12
-	github.com/nixpare/broadcaster v1.3.0
+	github.com/nixpare/broadcaster v1.3.1
 	github.com/nixpare/logger/v3 v3.0.4
 	github.com/nixpare/nix v0.1.1
-	github.com/nixpare/process v1.7.2
-	github.com/nixpare/server/v3 v3.0.0-beta.7
+	github.com/nixpare/process v1.7.3
+	github.com/nixpare/server/v3 v3.0.0-beta.8
 )
 
 require (
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/go-task/slim-sprig/v3 v3.0.0 // indirect
-	github.com/google/pprof v0.0.0-20250208200701-d0013a598941 // indirect
+	github.com/google/pprof v0.0.0-20250302191652-9094ed2288e7 // indirect
 	github.com/gorilla/securecookie v1.1.2 // indirect
 	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/koding/websocketproxy v0.0.0-20181220232114-7ed82d81a28c // indirect
@@ -26,8 +26,8 @@ require (
 	github.com/stretchr/testify v1.10.0 // indirect
 	github.com/yookoala/gofast v0.8.0 // indirect
 	go.uber.org/mock v0.5.0 // indirect
-	golang.org/x/crypto v0.34.0 // indirect
-	golang.org/x/exp v0.0.0-20250218142911-aa4b98e5adaa // indirect
+	golang.org/x/crypto v0.35.0 // indirect
+	golang.org/x/exp v0.0.0-20250228200357-dead58393ab7 // indirect
 	golang.org/x/mod v0.23.0 // indirect
 	golang.org/x/net v0.35.0 // indirect
 	golang.org/x/sync v0.11.0 // indirect
