@@ -127,20 +127,6 @@ func (srv *McServer) Start() error {
 	errLog.TrimFunc = noTrimFunc
 	errLogWriter := errLog.FixedLogger(logger.LOG_LEVEL_ERROR)
 
-	stdoutCh := srv.process.StdoutListener(20)
-	stderrCh := srv.process.StderrListener(20)
-
-	go func() {
-		for line := range stdoutCh {
-			outLogWriter.Write(append(line, '\n'))
-		}
-	}()
-	go func() {
-		for line := range stderrCh {
-			errLogWriter.Write(append(line, '\n'))
-		}
-	}()
-
 	err := srv.process.Start(nil, nil, nil)
 	if err != nil {
 		srv.msm.Logger.Printf(
@@ -155,6 +141,20 @@ func (srv *McServer) Start() error {
 		"Minecraft server %s started successfully", srv.Name,
 	)
 	srv.lastDisconnect = time.Now().Add(time.Minute * 10)
+
+	stdoutCh := srv.process.StdoutListener(20)
+	stderrCh := srv.process.StderrListener(20)
+
+	go func() {
+		for line := range stdoutCh {
+			outLogWriter.Write(append(line, '\n'))
+		}
+	}()
+	go func() {
+		for line := range stderrCh {
+			errLogWriter.Write(append(line, '\n'))
+		}
+	}()
 
 	go func() {
 		defer srv.SignalStateUpdate()

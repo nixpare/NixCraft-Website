@@ -189,7 +189,7 @@ func trustUser(ctx *nix.Context) (mcUser, error) {
 		return user, errors.New("invalid passcode")
 	}
 
-	ip := server.SplitAddrPort(ctx.R().RemoteAddr)
+	ip := server.SplitAddrPort(ctx.RemoteAddr())
 	if ip == "::1" {
 		ip = "127.0.0.1"
 	}
@@ -516,6 +516,7 @@ func wsUserInfo(ctx *nix.Context) {
 	user, err := trustUser(ctx)
 	if err != nil {
 		handleTrustUserResult(ctx, err)
+		return
 	}
 
 	if !ctx.IsWebSocketRequest() {
@@ -526,6 +527,7 @@ func wsUserInfo(ctx *nix.Context) {
 	conn, err := websocket.Accept(ctx, ctx.R(), nil)
 	if err != nil {
 		ctx.Error(http.StatusBadRequest, "Invalid Request", err)
+		return
 	}
 	defer conn.CloseNow()
 
@@ -563,6 +565,7 @@ func wsServerConsole(ctx *nix.Context) {
 	user, err := trustUser(ctx)
 	if err != nil {
 		handleTrustUserResult(ctx, err)
+		return
 	}
 
 	srvName := ctx.R().PathValue("server")
@@ -602,6 +605,7 @@ func wsServerConsole(ctx *nix.Context) {
 	conn, err := websocket.Accept(ctx, ctx.R(), nil)
 	if err != nil {
 		ctx.Error(http.StatusBadRequest, "Invalid Request", err)
+		return
 	}
 	defer conn.CloseNow()
 
