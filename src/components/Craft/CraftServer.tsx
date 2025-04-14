@@ -8,7 +8,6 @@ import ServerChat, { parseChatMessage } from './ServerChat';
 import { Updater, useImmer } from 'use-immer';
 import { Logs } from '../../models/Logs';
 import { User } from '../../models/User';
-import axios from 'axios';
 import { wsCleanup, wsIsActive } from '../../utils/websocket';
 
 type Section = 'info' | 'chat' | 'logs'
@@ -124,12 +123,16 @@ async function queryServerLogs(
 ) {
     const url = `/ws/${serverName}/console`;
 
-    const response = await axios.get(url)
-        .catch(err => {
-            showMessage(err.response.data);
+    const resp = await fetch(url)
+        .catch((err: Error) => {
+            showMessage(err.message);
         });
 
-    if (response == undefined) {
+    if (resp && !resp.ok) {
+        showMessage(await resp.text());
+    }
+
+    if (!resp || !resp.ok) {
         logsWS[serverName] = false
         return
     }

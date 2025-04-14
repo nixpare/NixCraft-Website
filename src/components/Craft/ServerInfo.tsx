@@ -1,6 +1,5 @@
 import './ServerInfo.css'
 
-import axios, { AxiosError } from "axios";
 import { PublicServer } from "../../models/Server";
 import { User } from "../../models/User";
 import { useEffect, useState } from 'react';
@@ -16,38 +15,54 @@ type ServerInfoProps = {
 
 export default function ServerInfo({ user, server, show, showMessage }: ServerInfoProps) {
 	const startServer = async () => {
-		const response = await axios.post(`/${server.name}/start`);
+		const resp = await fetch(`/${server.name}/start`, {
+			method: 'POST'
+		}).catch((err: Error) => {
+			showMessage(`Server failed to start: ${err.message}`);
+		});
 
-		if (response.status === 200) {
-			showMessage('Server started');
-		} else {
-			showMessage('Server failed to start');
+		if (!resp) return;
+
+		if (!resp.ok) {
+			showMessage(`Server failed to start: ${await resp.text()}`);
+			return;
 		}
+
+		showMessage('Server started');
 	}
 
 	const stopServer = async () => {
-		const response = await axios.post(`/${server.name}/stop`);
+		const resp = await fetch(`/${server.name}/stop`, {
+			method: 'POST'
+		}).catch((err: Error) => {
+			showMessage(`Server failed to stop: ${err.message}`);
+		});
 
-		if (response.status === 200) {
-			showMessage('Server stopped');
-		} else {
-			showMessage('Server failed to stop');
+		if (!resp) return;
+
+		if (!resp.ok) {
+			showMessage(`Server failed to stop: ${await resp.text()}`);
+			return;
 		}
+
+		showMessage('Server stopped');
 	}
 
 	const connectToServer = async () => {
-		const response = await axios.post(`/${server.name}/connect`)
-			.catch((err: AxiosError) => {
-				showMessage(err.message);
-			});
+		const resp = await fetch(`/${server.name}/connect`, {
+			method: 'POST'
+		}).catch((err: Error) => {
+			showMessage(`Failed to connect to server ${err.message}`);
+		});
 
-		if (response == undefined) return;
+		if (!resp) return;
 
-		if (response.status >= 400) {
-			showMessage('Failed to connect to server');
-		} else {
-			showMessage('Connected to server');
+		if (!resp.ok) {
+			showMessage(`Failed to connect to server ${await resp.text()}`);
+			return
 		}
+
+		showMessage('Connected to server');
 	}
 
 	const onlinePlayers = user.server && user.server.name == server.name && user.server?.players || []

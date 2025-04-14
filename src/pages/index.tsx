@@ -2,7 +2,6 @@ import './index.css'
 
 import { StrictMode, useEffect, useState } from 'react';
 import { createRoot, hydrateRoot } from 'react-dom/client';
-import axios from 'axios';
 import CraftServerList from '../components/Craft/CraftServerList';
 import CraftServer from '../components/Craft/CraftServer';
 import Footer from '../components/UI/Footer';
@@ -70,7 +69,7 @@ function CraftHome() {
 		return undefined
 
 	const logout = async () => {
-		await axios.get('/logout');
+		await fetch('/logout').catch((_) => {});
 		window.location.href = '/login';
 	}
 
@@ -126,13 +125,19 @@ async function startServersInfoWS(
 ) {
 	const url = `/ws/servers`;
 
-	const response = await axios.get(url)
-		.catch(err => {
-			onMessage(err.response.data);
+	const resp = await fetch(url)
+		.catch((err: Error) => {
+			onMessage(err.message);
 		});
 
-	if (response == undefined) return
-	setServersInfo(response.data)
+	if (!resp) return;
+
+	if (!resp.ok) {
+		onMessage(await resp.text());
+		return;
+	}
+
+	setServersInfo(await resp.json())
 
 	serversWS = new WebSocket(url)
 
@@ -153,13 +158,19 @@ async function startUserInfoWS(
 ) {
 	const url = `/ws/user`;
 
-	const response = await axios.get(url)
-		.catch(err => {
-			onMessage(err.response.data);
+	const resp = await fetch(url)
+		.catch((err: Error) => {
+			onMessage(err.message);
 		});
 
-	if (response == undefined) return
-	setUserInfo(response.data)
+	if (!resp) return;
+
+	if (!resp.ok) {
+		onMessage(await resp.text());
+		return;
+	}
+
+	setUserInfo(await resp.json())
 
 	userWS = new WebSocket(url)
 
