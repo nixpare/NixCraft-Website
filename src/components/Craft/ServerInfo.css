@@ -46,10 +46,15 @@
 .server-state .server-state-dot {
 	width: .6em;
 	height: .6em;
-	background-color: red;
 	border-radius: 50%;
 }
 
+.server-state.offline .server-state-dot {
+	background-color: red;
+}
+.server-state.loading .server-state-dot {
+	background-color: orange;
+}
 .server-state.online .server-state-dot {
 	background-color: green;
 }

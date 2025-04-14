@@ -22,6 +22,13 @@ export type ServerProps = {
 
 export default function CraftServer({ user, server, serverName, closeServer, showMessage }: ServerProps) {
     const [section, setSection] = useState('info' as Section)
+    
+    const [loaded, setLoaded] = useState(false)
+    useEffect(() => {
+        if (!server.running) {
+            setLoaded(false)
+        }
+    }, [server.running])
 
     const [logs, updateLogs] = useImmer<Logs>({
         rawLogs: [],
@@ -51,7 +58,8 @@ export default function CraftServer({ user, server, serverName, closeServer, sho
         logsWS[server.name] = true
         queryServerLogs(
             server.name, user,
-            updateLogs, showMessage
+            updateLogs, () => { server.running && setLoaded(true) },
+            showMessage
         );
 
         return callback
@@ -71,7 +79,7 @@ export default function CraftServer({ user, server, serverName, closeServer, sho
             <button className="close-button" onClick={closeServer}>
                 <i className="fa-solid fa-xmark"></i>
             </button>
-            <ServerOnlineState server={server} />
+            <ServerOnlineState server={server} loaded={loaded} />
             <div className="sections-selector">
                 <div
                     className={section == 'info' ? 'selected' : undefined}
@@ -119,7 +127,8 @@ let logsWS: Record<string, WebSocket | boolean> = {}
 
 async function queryServerLogs(
     serverName: string, user: User,
-    updateLogs: Updater<Logs>, showMessage: (message: string) => void
+    updateLogs: Updater<Logs>, setServerLoaded: () => void,
+    showMessage: (message: string) => void
 ) {
     const url = `/ws/${serverName}/console`;
 
@@ -151,6 +160,9 @@ async function queryServerLogs(
         updateLogs(logs => {
             const log = JSON.parse(ev.data)
             const parsed = parseLog(log, logs.rawLogs)
+            if (parsed.from == 'Server thread' && parsed.message.startsWith('Done')) {
+                setServerLoaded();
+            }
             parseChatMessage(user, parsed, logs.chat)
         })
     }

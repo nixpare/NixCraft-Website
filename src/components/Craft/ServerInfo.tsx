@@ -105,15 +105,25 @@ export default function ServerInfo({ user, server, show, showMessage }: ServerIn
 }
 
 type ServerOnlineStateProps = {
-	server: PublicServer
+	server: PublicServer,
+	loaded: boolean
 }
 
-export function ServerOnlineState({ server }: ServerOnlineStateProps) {
+export function ServerOnlineState({ server, loaded }: ServerOnlineStateProps) {
+	const state: {
+		value: string
+		display: string
+	} = server.running
+		? loaded
+			? { value: 'online', display: 'Online' }
+			: { value: 'loading', display: 'Loading' }
+		: { value: 'offline', display: 'Offline' }
+	
 	return (
-		<div className={`server-state ${server.running ? 'online' : ''}`}>
+		<div className={`server-state ${state.value}`}>
 			<i className="server-state-dot"></i>
 			<div className="server-state-descr">
-				{server.running ? 'Online' : 'Offline'}
+				{state.display}
 			</div>
 			{server.running ? <div className="player-count">
 				<i className="fa-solid fa-users"></i>

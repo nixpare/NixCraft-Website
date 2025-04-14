@@ -28,7 +28,7 @@ export default function CraftServerList({ servers, aside, setCurrentServer }: Se
                   </div>
                   <ServerType server={server} />
                 </div>
-                <ServerOnlineState server={server} />
+                <ServerOnlineState server={server} loaded />
               </div>
               <i className="fa-solid fa-chevron-right"></i>
             </li>
