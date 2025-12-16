@@ -4,7 +4,6 @@ import { useEffect, useState, useRef } from "react";
 import SendCommand from './SendCommand';
 import { ChatMessage, ParsedLog } from '../../models/Logs';
 import { User } from '../../models/User';
-import axios from 'axios';
 import { getProfileImage, ProfileImageType } from '../../utils/ProfileImageCache';
 import { InRelief } from '../UI/InRelief';
 
@@ -37,27 +36,35 @@ export default function ServerChat({ serverName, chat, show, showMessage }: Serv
     }
 
     const sendMessage = async (message: string) => {
-        const response = await axios.post(`/${serverName}/message`, message)
-            .catch((error) => {
-                showMessage(error.message);
-            });
+        const resp = await fetch(`/${serverName}/message`, {
+            method: 'POST',
+            body: message
+        }).catch((err: Error) => {
+            showMessage(err.message);
+        });
 
-        if (!response) return;
+        if (!resp) return;
 
-        if (response.status >= 400)
-            showMessage(response.data);
+        if (!resp.ok) {
+            showMessage(await resp.text());
+            return;
+        }
     }
 
     const sendBroadcast = async (message: string) => {
-        const response = await axios.post(`/${serverName}/broadcast`, message)
-            .catch((error) => {
-                showMessage(error.message);
-            });
+        const resp = await fetch(`/${serverName}/broadcast`, {
+            method: 'POST',
+            body: message
+        }).catch((err: Error) => {
+            showMessage(err.message);
+        });
 
-        if (!response) return;
+        if (!resp) return;
 
-        if (response.status >= 400)
-            showMessage(response.data);
+        if (!resp.ok) {
+            showMessage(await resp.text());
+            return;
+        }
     }
 
     return (

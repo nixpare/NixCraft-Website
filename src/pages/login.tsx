@@ -1,18 +1,24 @@
 import './login.css'
 
-import axios, { AxiosError } from 'axios';
 import { useForm, SubmitHandler } from 'react-hook-form';
 import { Snackbar } from '@mui/material';
 import { StrictMode, useState } from 'react';
 import Navbar from '../components/UI/Navbar';
-import { createRoot } from 'react-dom/client';
+import { createRoot, hydrateRoot } from 'react-dom/client';
 import Footer from '../components/UI/Footer';
 
-createRoot(document.getElementById('root')!).render(
+const App = (
   <StrictMode>
     <CraftLogin />
-  </StrictMode>,
+  </StrictMode>
 )
+
+const rootElement = document.getElementById("root");
+if (rootElement?.hasChildNodes()) {
+  hydrateRoot(rootElement, App)
+} else {
+  createRoot(rootElement!).render(App)
+}
 
 type FormValues = {
   username: string;
@@ -30,17 +36,25 @@ function CraftLogin() {
   });
 
   const onSubmit: SubmitHandler<FormValues> = async (data) => {
-    const response = await axios.post(location.href, {
-      username: data.username,
-      passcode: data.password
-    }).catch((error: AxiosError) => {
-      console.log(error)
-      setErrorMessage(`${error.message}`);
+    const resp = await fetch(location.href, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        username: data.username,
+        passcode: data.password
+      })
+    }).catch((err: Error) => {
+      setErrorMessage(err.message);
       setOpenSnackbar(true);
     });
 
-    if (response == undefined || response.status >= 400)
-      return
+    if (!resp) return;
+
+    if (!resp.ok) {
+      setErrorMessage(await resp.text());
+      setOpenSnackbar(true);
+      return;
+    }
 
     localStorage.setItem('username', data.username);
     window.location.href = '/';

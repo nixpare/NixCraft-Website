@@ -1,5 +1,3 @@
-import axios from "axios"
-
 export enum ProfileImageType {
 	ARMOR_BUST,
 	HEADHELM
@@ -22,10 +20,13 @@ const cache = new Map <ProfileImageType, Map<string, any>>([
 export async function getProfileImage(username: string, type = ProfileImageType.ARMOR_BUST): Promise<any> {
 	const imageTypeCache = cache.get(type)
 	let data = imageTypeCache?.get(username)
-	if (data)
-		return data
+	
+	if (data) return data;
 
-	const resp = await axios.get(`/profile/${username}?type=${profileImageTypeURL(type)}`, { responseType: 'blob' })
-	imageTypeCache?.set(username, resp.data)
-	return resp.data
+	const resp = await fetch(`/profile/${username}?type=${profileImageTypeURL(type)}`)
+	if (!resp.ok) throw new Error(await resp.text());
+
+	data = await resp.blob()
+	imageTypeCache?.set(username, data)
+	return data
 }

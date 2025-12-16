@@ -18,9 +18,6 @@ export default ({label, sendFunc, prefix=""}: SendCommandProps) => {
     }
 
     const changeCommand = (event: React.ChangeEvent<HTMLInputElement>) => {
-        if (event.target.value == "")
-            event.target.value = prefix
-
         setCommand(event.target.value);
     }
 

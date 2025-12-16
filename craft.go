@@ -5,7 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -58,10 +61,10 @@ func CraftInit(router *server.Router, commandServers []*commands.CommandServer) 
 
 			now := time.Now()
 			for _, srv := range MC.Servers {
-				srv.m.RLock()
+				srv.mutex.RLock()
 				isRunning := srv.IsRunning()
 				players := len(srv.Players)
-				srv.m.RUnlock()
+				srv.mutex.RUnlock()
 
 				if !isRunning || players != 0 {
 					continue
@@ -69,7 +72,7 @@ func CraftInit(router *server.Router, commandServers []*commands.CommandServer) 
 
 				if now.After(srv.lastDisconnect.Add(time.Minute * 10)) {
 					srv.serverLog.Printf(logger.LOG_LEVEL_INFO, "Shutting down server for inactivity")
-					
+
 					err := srv.Stop()
 					if err != nil {
 						t.Logger.Printf(logger.LOG_LEVEL_ERROR, "Error shutting down Minecraft Server %s: %v", srv.Name, err)
@@ -79,7 +82,7 @@ func CraftInit(router *server.Router, commandServers []*commands.CommandServer) 
 
 			return nil
 		}
-		
+
 		cleanupF = func(_ *server.Task) error {
 			return MC.StopAll()
 		}
@@ -112,8 +115,7 @@ func Nixcraft() http.Handler {
 	mux := http.NewServeMux()
 	n := nix.New(
 		nix.CookieManagerOption(cookieManager),
-		nix.EnableLoggingOption(),
-		nix.LoggerOption(logger.DefaultLogger),
+		nix.LoggerOption(MC.Logger.Clone(nil, true, "http")),
 		nix.EnableErrorCaptureOption(),
 		nix.EnableRecoveryOption(),
 		nix.ConnectToMainOption(),
@@ -138,7 +140,7 @@ func Nixcraft() http.Handler {
 
 		if forwardToReact {
 			ctx.DisableErrorCapture()
-			ctx.ReverseProxy(reactAddr)
+			ctx.ReverseProxy(reactAddr, "", "")
 			return
 		} else {
 			path := ctx.RequestPath()
@@ -153,6 +155,7 @@ func Nixcraft() http.Handler {
 	// GET
 	mux.HandleFunc("GET /logout", n.Handle(getLogout))
 	mux.HandleFunc("GET /profile/{username}", n.Handle(getProfilePicture))
+	mux.HandleFunc("GET /map/{server}/", n.Handle(getServerMapViewAssets))
 
 	// POST
 	mux.HandleFunc("POST /", n.Handle(func(ctx *nix.Context) {
@@ -187,7 +190,13 @@ func trustUser(ctx *nix.Context) (mcUser, error) {
 		return user, errors.New("invalid passcode")
 	}
 
-	ip := server.SplitAddrPort(ctx.R().RemoteAddr)
+	ip, _, err := net.SplitHostPort(ctx.RemoteAddr())
+	if err != nil {
+		ctx.DeleteCookie(nixcraft_cookie_name)
+		ctx.Logger().Printf(logger.LOG_LEVEL_ERROR, "craft: error retrieving ip address: %s: %v", ctx.RemoteAddr(), err)
+		return user, errors.New("invalid ip address")
+	}
+
 	if ip == "::1" {
 		ip = "127.0.0.1"
 	}
@@ -221,9 +230,10 @@ func getLogout(ctx *nix.Context) {
 }
 
 type ImageType string
+
 const (
 	ARMOR_BUST ImageType = "armor_bust"
-	HEADHELM ImageType = "headhelm"
+	HEADHELM   ImageType = "headhelm"
 )
 
 func (i ImageType) ToURL() string {
@@ -231,6 +241,12 @@ func (i ImageType) ToURL() string {
 }
 
 func getProfilePicture(ctx *nix.Context) {
+	_, err := trustUser(ctx)
+	if err != nil {
+		handleTrustUserResult(ctx, err)
+		return
+	}
+
 	username := ctx.R().PathValue("username")
 	if username == "" {
 		ctx.Error(http.StatusBadRequest, "Invalid request", "missing username")
@@ -249,7 +265,6 @@ func getProfilePicture(ctx *nix.Context) {
 		urlPath = ARMOR_BUST.ToURL()
 	}
 
-
 	resp, err := http.Get(fmt.Sprintf("https://mineskin.eu/%s/%s", urlPath, username))
 	if err != nil {
 		ctx.Error(http.StatusInternalServerError, "Unable to fetch profile picture", err)
@@ -262,6 +277,50 @@ func getProfilePicture(ctx *nix.Context) {
 		ctx.Error(http.StatusInternalServerError, "Unable to provide profile picture", err)
 		return
 	}
+}
+
+func getServerMapViewAssets(ctx *nix.Context) {
+	srvName := ctx.R().PathValue("server")
+
+	_, err := trustUser(ctx)
+	if err != nil {
+		handleTrustUserResult(ctx, err)
+		return
+	}
+
+	srv, ok := MC.GetServer(srvName)
+	if !ok {
+		ctx.Error(http.StatusNotFound, fmt.Sprintf("Server %s not found", srvName))
+		return
+	}
+
+	bluemapAssetsPath := filepath.Join(srv.process.WorkDir(), "bluemap/web")
+	info, err := os.Stat(bluemapAssetsPath)
+	if err != nil || !info.IsDir() {
+		ctx.Error(http.StatusNotFound, fmt.Sprintf("Server %s does not support Bluemap plugin", srvName))
+		return
+	}
+
+	bluemapAssetsDir := os.DirFS(bluemapAssetsPath)
+	requestPath := strings.Replace(ctx.RequestPath(), "/map/"+srvName, "", 1)
+
+	if requestPath[0] == '/' {
+		requestPath = requestPath[1:]
+	}
+
+	if requestPath == "" {
+		requestPath = "index.html"
+	} else {
+		ctx.DisableErrorCapture()
+		ctx.DisableLogging()
+	}
+
+	if _, err := bluemapAssetsDir.Open(requestPath + ".gz"); err == nil {
+		requestPath += ".gz"
+		ctx.Header().Set("Content-Encoding", "gzip")
+	}
+
+	ctx.ServeFileFS(bluemapAssetsDir, requestPath)
 }
 
 //
@@ -355,10 +414,8 @@ func postGeneralMessage(ctx *nix.Context, buildCmd func(user *McUser, message st
 
 	user = u.user
 
-	MC.mutex.RLock()
 	var found bool
-	srv, found = MC.Servers[srvName]
-	MC.mutex.RUnlock()
+	srv, found = MC.GetServer(srvName)
 	if !found {
 		ctx.Error(http.StatusBadRequest, fmt.Sprintf("Server %s not found", srvName))
 		return
@@ -388,7 +445,7 @@ func postGeneralMessage(ctx *nix.Context, buildCmd func(user *McUser, message st
 
 func postMessage(ctx *nix.Context) {
 	user, srv, message, ok := postGeneralMessage(ctx, func(user *McUser, message string) string {
-		return fmt.Sprintf(`/tellraw @p "<%s (Web)> %s"`, user.Name, message)
+		return fmt.Sprintf(`tellraw @p "<%s (Web)> %s"`, user.Name, message)
 	})
 	if !ok {
 		return
@@ -404,7 +461,7 @@ func postMessage(ctx *nix.Context) {
 
 func postBroadcast(ctx *nix.Context) {
 	user, srv, message, ok := postGeneralMessage(ctx, func(user *McUser, message string) string {
-		return fmt.Sprintf(`/title @a title {"text": "<%s (Web)> %s"}`, user.Name, message)
+		return fmt.Sprintf(`title @a title {"text": "<%s (Web)> %s"}`, user.Name, message)
 	})
 	if !ok {
 		return
@@ -432,6 +489,7 @@ func wsServersInfo(ctx *nix.Context) {
 	}
 
 	if !ctx.IsWebSocketRequest() {
+		ctx.JSON(MC.generateState())
 		return
 	}
 
@@ -465,15 +523,18 @@ func wsUserInfo(ctx *nix.Context) {
 	user, err := trustUser(ctx)
 	if err != nil {
 		handleTrustUserResult(ctx, err)
+		return
 	}
 
 	if !ctx.IsWebSocketRequest() {
+		ctx.JSON(user.user.generateState())
 		return
 	}
 
 	conn, err := websocket.Accept(ctx, ctx.R(), nil)
 	if err != nil {
 		ctx.Error(http.StatusBadRequest, "Invalid Request", err)
+		return
 	}
 	defer conn.CloseNow()
 
@@ -511,46 +572,49 @@ func wsServerConsole(ctx *nix.Context) {
 	user, err := trustUser(ctx)
 	if err != nil {
 		handleTrustUserResult(ctx, err)
+		return
 	}
 
 	srvName := ctx.R().PathValue("server")
 
-	MC.mutex.RLock()
-	srv, ok := MC.Servers[srvName]
-	MC.mutex.RUnlock()
-
+	srv, ok := MC.GetServer(srvName)
 	if !ok {
-		ctx.Error(http.StatusBadRequest, fmt.Sprintf("Server %s not found", srvName))
+		msg := fmt.Sprintf("Server %s not found", srvName)
+		ctx.Error(http.StatusBadRequest, msg, msg)
 		return
 	}
 
-	srv.m.RLock()
-	log := srv.log
-	serverLog := srv.serverLog
-	userLog := srv.userLog
-	srv.m.RUnlock()
+	srv.mutex.RLock()
+	l := srv.log
+	serverLogger := srv.serverLog
+	userLogger := srv.userLog
+	srv.mutex.RUnlock()
 
-	if log == nil {
-		ctx.Error(http.StatusBadRequest, fmt.Sprintf("Server %s was never started", srvName))
+	if l == nil {
+		msg := fmt.Sprintf("Server %s was never started", srvName)
+		ctx.Error(http.StatusBadRequest, msg, msg)
 		return
 	}
+
+	prevLogsN, ch := l.ListenForLogs(20)
+	defer ch.Unregister()
+	prevLogs := l.GetLogs(0, prevLogsN)
 
 	// Questo permette al client prima di inviare una richiesta http normale e vedere se ci può
 	// essere qualche errore, quindi in caso di richiesta valida allora aprirà la connessione
 	// websocket vera
 	if !ctx.IsWebSocketRequest() {
+		data, _ := json.Marshal(prevLogs)
+		ctx.JSON(data)
 		return
 	}
 
 	conn, err := websocket.Accept(ctx, ctx.R(), nil)
 	if err != nil {
 		ctx.Error(http.StatusBadRequest, "Invalid Request", err)
+		return
 	}
 	defer conn.CloseNow()
-
-	prevLogsN, ch := log.ListenForLogs(20)
-	defer ch.Unregister()
-	prevLogs := log.GetLogs(0, prevLogsN)
 
 	for _, log := range prevLogs {
 		err := conn.Write(ctx.R().Context(), websocket.MessageText, log.JSON())
@@ -578,10 +642,10 @@ func wsServerConsole(ctx *nix.Context) {
 
 			cmd := string(b)
 
-			userLog.Printf(logger.LOG_LEVEL_WARNING, "User %s sent command: <%s>", user.Username, cmd)
+			userLogger.Printf(logger.LOG_LEVEL_WARNING, "User %s sent command: <%s>", user.Username, cmd)
 			err = srv.SendInput(cmd)
 			if err != nil {
-				serverLog.Printf(logger.LOG_LEVEL_ERROR, "User %s sent command <%s> but an error occurred: %v", user.user.Name, cmd, err)
+				serverLogger.Printf(logger.LOG_LEVEL_ERROR, "User %s sent command <%s> but an error occurred: %v", user.user.Name, cmd, err)
 			}
 		}
 	}()
@@ -593,7 +657,7 @@ func wsServerConsole(ctx *nix.Context) {
 	loop:
 		for {
 			select {
-			case log, ok := <- logCh:
+			case log, ok := <-logCh:
 				if !ok {
 					break loop
 				}
@@ -604,7 +668,7 @@ func wsServerConsole(ctx *nix.Context) {
 					ctx.AddInteralMessage(fmt.Sprintf("websocket: write error: %v", err))
 					return
 				}
-			case <- exitC:
+			case <-exitC:
 				break loop
 			}
 		}

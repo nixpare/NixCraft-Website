@@ -2,19 +2,19 @@ import './CraftServer.css'
 
 import ServerLogs, { parseLog } from './ServerLogs';
 import { useEffect, useState } from "react";
-import { Server } from "../../models/Server";
-import ServerInfo, { ServerOnlineState } from './ServerInfo';
+import { PublicServer } from "../../models/Server";
+import ServerInfo, { ServerOnlineState, ServerType } from './ServerInfo';
 import ServerChat, { parseChatMessage } from './ServerChat';
 import { Updater, useImmer } from 'use-immer';
 import { Logs } from '../../models/Logs';
 import { User } from '../../models/User';
-import axios from 'axios';
+import { wsCleanup, wsIsActive } from '../../utils/websocket';
 
 type Section = 'info' | 'chat' | 'logs'
 
 export type ServerProps = {
     user: User;
-    server: Server;
+    server: PublicServer;
     serverName: string;
     closeServer: () => void;
     showMessage: (message: string) => void;
@@ -22,6 +22,13 @@ export type ServerProps = {
 
 export default function CraftServer({ user, server, serverName, closeServer, showMessage }: ServerProps) {
     const [section, setSection] = useState('info' as Section)
+    
+    const [loaded, setLoaded] = useState(false)
+    useEffect(() => {
+        if (!server.running) {
+            setLoaded(false)
+        }
+    }, [server.running])
 
     const [logs, updateLogs] = useImmer<Logs>({
         rawLogs: [],
@@ -36,27 +43,43 @@ export default function CraftServer({ user, server, serverName, closeServer, sho
     }, [serverName])
 
     useEffect(() => {
-        cleanup()
+        const callback = () => {
+            if (!wsIsActive(logsWS[server.name]))
+                return
 
-        if ((ws && !wsIsActive(ws)))
-            return cleanup
+            const ws = logsWS[server.name]
+            logsWS[server.name] = false
+            wsCleanup(ws)
+        }
 
-        ws = true
+        if (logsWS[server.name])
+            return callback
+
+        logsWS[server.name] = true
         queryServerLogs(
             server.name, user,
-            updateLogs, showMessage
+            updateLogs, () => { server.running && setLoaded(true) },
+            showMessage
         );
 
-        return cleanup
-    }, [server]);
+        return callback
+    }, [server.name, server.running]);
 
     return (
         <div className="selected-server">
-            <h1>{server.name}</h1>
+            <div>
+                <div className="server-title">
+                    <h1>{server.name}</h1>
+                    <a href={`/map/${serverName}`} target='_self'><i className="fa-solid fa-map"></i></a>
+                </div>
+                <ServerType server={server} />
+            </div>
+
+
             <button className="close-button" onClick={closeServer}>
                 <i className="fa-solid fa-xmark"></i>
             </button>
-            <ServerOnlineState server={server} />
+            <ServerOnlineState server={server} loaded={loaded} />
             <div className="sections-selector">
                 <div
                     className={section == 'info' ? 'selected' : undefined}
@@ -90,6 +113,7 @@ export default function CraftServer({ user, server, serverName, closeServer, sho
                     showMessage={showMessage}
                 />
                 <ServerLogs
+                    serverName={serverName}
                     logs={logs.rawLogs}
                     show={section == 'logs'}
                     showMessage={showMessage}
@@ -99,25 +123,32 @@ export default function CraftServer({ user, server, serverName, closeServer, sho
     )
 }
 
-let ws = false as WebSocket | boolean
+let logsWS: Record<string, WebSocket | boolean> = {}
 
 async function queryServerLogs(
     serverName: string, user: User,
-    updateLogs: Updater<Logs>, showMessage: (message: string) => void
+    updateLogs: Updater<Logs>, setServerLoaded: () => void,
+    showMessage: (message: string) => void
 ) {
     const url = `/ws/${serverName}/console`;
 
-    const response = await axios.get(url)
-        .catch(err => {
-            showMessage(err.response.data);
+    const resp = await fetch(url)
+        .catch((err: Error) => {
+            showMessage(err.message);
         });
 
-    if (response == undefined) {
-        ws = false
+    if (resp && !resp.ok) {
+        showMessage(await resp.text());
+    }
+
+    if (!resp || !resp.ok) {
+        logsWS[serverName] = false
         return
     }
 
-    ws = new WebSocket(url)
+    const ws = new WebSocket(url)
+    logsWS[serverName] = ws
+
     ws.onopen = () => {
         updateLogs((logs) => {
             // settare length a 0 è più efficiente e non fa arrabbiare il compilatore
@@ -125,31 +156,23 @@ async function queryServerLogs(
             logs.chat.length = 0
         });
     }
-    ws.onclose = () => {
-        ws = false
-    }
     ws.onmessage = (ev) => {
         updateLogs(logs => {
             const log = JSON.parse(ev.data)
             const parsed = parseLog(log, logs.rawLogs)
+            if ((parsed.from == 'Server thread' || parsed.from == 'Server') && parsed.message.startsWith('Done')) {
+                setServerLoaded();
+            }
             parseChatMessage(user, parsed, logs.chat)
         })
     }
     ws.onerror = () => {
-        showMessage('Server connection error')
+        showMessage('Server logs connection error')
     }
 }
 
-function cleanup() {
-    wsIsActive(ws) && ws.close()
-}
-
-function wsIsActive(ws: WebSocket | boolean): ws is WebSocket {
-    // @ts-ignore
-    return ws && ws.close
-}
-
-export function getWS(): WebSocket | null {
+export function getLogsWS(serverName: string): WebSocket | null {
+    const ws = logsWS[serverName]
     if (wsIsActive(ws)) {
         return ws
     } else {

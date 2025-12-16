@@ -51,6 +51,7 @@
 }
 .servers-list.aside .server-entry {
 	width: -webkit-fill-available;
+	width: -moz-available;
 	padding: 1.5em 2em;
 }
 
@@ -66,9 +67,8 @@
 	font-weight: bold;
 }
 
-.server-entry .server-type {
-	font-size: .8em;
-	color: #aaa;
+.servers-list.aside .server-entry .server-type > .type {
+	display: none;
 }
 
 .servers-list:not(.aside) .server-entry > i {

@@ -1,7 +1,6 @@
 import './ServerInfo.css'
 
-import axios, { AxiosError } from "axios";
-import { Server } from "../../models/Server";
+import { PublicServer } from "../../models/Server";
 import { User } from "../../models/User";
 import { useEffect, useState } from 'react';
 import { getProfileImage, ProfileImageType } from '../../utils/ProfileImageCache';
@@ -9,46 +8,64 @@ import { InRelief } from '../UI/InRelief';
 
 type ServerInfoProps = {
 	user: User;
-	server: Server;
+	server: PublicServer;
 	show: boolean;
 	showMessage: (message: string) => void;
 }
 
 export default function ServerInfo({ user, server, show, showMessage }: ServerInfoProps) {
 	const startServer = async () => {
-		const response = await axios.post(`/${server.name}/start`);
+		const resp = await fetch(`/${server.name}/start`, {
+			method: 'POST'
+		}).catch((err: Error) => {
+			showMessage(`Server failed to start: ${err.message}`);
+		});
 
-		if (response.status === 200) {
-			showMessage('Server started');
-		} else {
-			showMessage('Server failed to start');
+		if (!resp) return;
+
+		if (!resp.ok) {
+			showMessage(`Server failed to start: ${await resp.text()}`);
+			return;
 		}
+
+		showMessage('Server started');
 	}
 
 	const stopServer = async () => {
-		const response = await axios.post(`/${server.name}/stop`);
+		const resp = await fetch(`/${server.name}/stop`, {
+			method: 'POST'
+		}).catch((err: Error) => {
+			showMessage(`Server failed to stop: ${err.message}`);
+		});
 
-		if (response.status === 200) {
-			showMessage('Server stopped');
-		} else {
-			showMessage('Server failed to stop');
+		if (!resp) return;
+
+		if (!resp.ok) {
+			showMessage(`Server failed to stop: ${await resp.text()}`);
+			return;
 		}
+
+		showMessage('Server stopped');
 	}
 
 	const connectToServer = async () => {
-		const response = await axios.post(`/${server.name}/connect`)
-			.catch((err: AxiosError) => {
-				showMessage(err.message);
-			});
+		const resp = await fetch(`/${server.name}/connect`, {
+			method: 'POST'
+		}).catch((err: Error) => {
+			showMessage(`Failed to connect to server ${err.message}`);
+		});
 
-		if (response == undefined) return;
+		if (!resp) return;
 
-		if (response.status >= 400) {
-			showMessage('Failed to connect to server');
-		} else {
-			showMessage('Connected to server');
+		if (!resp.ok) {
+			showMessage(`Failed to connect to server ${await resp.text()}`);
+			return
 		}
+
+		showMessage('Connected to server');
 	}
+
+	const onlinePlayers = user.server && user.server.name == server.name && user.server?.players || []
 
 	return (
 		<div className="server-info" style={!show ? { display: 'none' } : undefined}>
@@ -65,20 +82,22 @@ export default function ServerInfo({ user, server, show, showMessage }: ServerIn
 				</InRelief>
 			</div>
 			{<div className="connect">
-				{user.server != server.name ? <>
-					<InRelief clickable>
-						<button onClick={connectToServer}>
+				<InRelief clickable>
+					<button onClick={connectToServer}>
+						{user.server && user.server.name == server.name ? (
+							<div>
+								Connected
+								<i className="fa-solid fa-circle-check connected-check"></i>
+							</div>
+						) : (
 							<div>Connect</div>
-						</button>
-					</InRelief>
-				</> : <div>
-					Connected
-					<i className="fa-solid fa-circle-check connected-check"></i>
-				</div>}
+						)}
+					</button>
+				</InRelief>
 			</div>}
 			<div className="online-players">
-				{server.running && Object.values(server.players || {}).map(player => {
-					return <PlayerTag name={player.name} key={player.name} />
+				{onlinePlayers.map(player => {
+					return <PlayerTag name={player} key={player} />
 				})}
 			</div>
 		</div>
@@ -86,20 +105,43 @@ export default function ServerInfo({ user, server, show, showMessage }: ServerIn
 }
 
 type ServerOnlineStateProps = {
-	server: Server
+	server: PublicServer,
+	loaded: boolean
 }
 
-export function ServerOnlineState({ server }: ServerOnlineStateProps) {
+export function ServerOnlineState({ server, loaded }: ServerOnlineStateProps) {
+	const state: {
+		value: string
+		display: string
+	} = server.running
+		? loaded
+			? { value: 'online', display: 'Online' }
+			: { value: 'loading', display: 'Loading' }
+		: { value: 'offline', display: 'Offline' }
+	
 	return (
-		<div className={`server-state ${server.running ? 'online' : ''}`}>
+		<div className={`server-state ${state.value}`}>
 			<i className="server-state-dot"></i>
 			<div className="server-state-descr">
-				{server.running ? 'Online' : 'Offline'}
+				{state.display}
 			</div>
-			{server.running ? <div className="online-players">
+			{server.running ? <div className="player-count">
 				<i className="fa-solid fa-users"></i>
-				{Object.values(server.players ?? {}).length}
+				{server.players}
 			</div> : undefined}
+		</div>
+	)
+}
+
+type ServerTypeProps = {
+	server: PublicServer
+}
+
+export function ServerType({ server }: ServerTypeProps) {
+	return (
+		<div className="server-type">
+			<div className="version">{server.version}</div>
+			<div className="type">({server.type})</div>
 		</div>
 	)
 }
