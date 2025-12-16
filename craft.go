@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -139,7 +140,7 @@ func Nixcraft() http.Handler {
 
 		if forwardToReact {
 			ctx.DisableErrorCapture()
-			ctx.ReverseProxy(reactAddr)
+			ctx.ReverseProxy(reactAddr, "", "")
 			return
 		} else {
 			path := ctx.RequestPath()
@@ -189,7 +190,13 @@ func trustUser(ctx *nix.Context) (mcUser, error) {
 		return user, errors.New("invalid passcode")
 	}
 
-	ip := server.SplitAddrPort(ctx.RemoteAddr())
+	ip, _, err := net.SplitHostPort(ctx.RemoteAddr())
+	if err != nil {
+		ctx.DeleteCookie(nixcraft_cookie_name)
+		ctx.Logger().Printf(logger.LOG_LEVEL_ERROR, "craft: error retrieving ip address: %s: %v", ctx.RemoteAddr(), err)
+		return user, errors.New("invalid ip address")
+	}
+
 	if ip == "::1" {
 		ip = "127.0.0.1"
 	}
@@ -438,7 +445,7 @@ func postGeneralMessage(ctx *nix.Context, buildCmd func(user *McUser, message st
 
 func postMessage(ctx *nix.Context) {
 	user, srv, message, ok := postGeneralMessage(ctx, func(user *McUser, message string) string {
-		return fmt.Sprintf(`/tellraw @p "<%s (Web)> %s"`, user.Name, message)
+		return fmt.Sprintf(`tellraw @p "<%s (Web)> %s"`, user.Name, message)
 	})
 	if !ok {
 		return
@@ -454,7 +461,7 @@ func postMessage(ctx *nix.Context) {
 
 func postBroadcast(ctx *nix.Context) {
 	user, srv, message, ok := postGeneralMessage(ctx, func(user *McUser, message string) string {
-		return fmt.Sprintf(`/title @a title {"text": "<%s (Web)> %s"}`, user.Name, message)
+		return fmt.Sprintf(`title @a title {"text": "<%s (Web)> %s"}`, user.Name, message)
 	})
 	if !ok {
 		return

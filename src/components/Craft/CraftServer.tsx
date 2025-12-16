@@ -160,7 +160,7 @@ async function queryServerLogs(
         updateLogs(logs => {
             const log = JSON.parse(ev.data)
             const parsed = parseLog(log, logs.rawLogs)
-            if (parsed.from == 'Server thread' && parsed.message.startsWith('Done')) {
+            if ((parsed.from == 'Server thread' || parsed.from == 'Server') && parsed.message.startsWith('Done')) {
                 setServerLoaded();
             }
             parseChatMessage(user, parsed, logs.chat)

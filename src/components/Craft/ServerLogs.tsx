@@ -66,7 +66,7 @@ export default function ServerLogs({ serverName, logs, show, showMessage }: Serv
                     </tbody>
                 </table>
             </div>
-            <SendCommand label="Command" sendFunc={send} prefix="/" />
+            <SendCommand label="Command" sendFunc={send} />
         </div>
     );
 }

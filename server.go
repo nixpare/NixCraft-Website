@@ -191,17 +191,17 @@ func (srv *McServer) Stop() error {
 	
 	go func() {
 		if onlinePlayers {
-			srv.process.SendText("/title @a times 0.5s 0.3s 0.5s")
-			shutdownInProgressSubtitle := "/title @a subtitle {\"text\": \"Server is going to shut down\"}"
+			srv.process.SendText("title @a times 0.5s 0.3s 0.5s")
+			shutdownInProgressSubtitle := "title @a subtitle {\"text\": \"Server is going to shut down\"}"
 
 			for i := range 5 {
-				srv.process.SendText(fmt.Sprintf("/title @a title {\"text\": \"%d\"}", 5-i))
+				srv.process.SendText(fmt.Sprintf("title @a title {\"text\": \"%d\"}", 5-i))
 				srv.process.SendText(shutdownInProgressSubtitle)
 				time.Sleep(time.Second)
 			}
 
-			srv.process.SendText("/title @a times 1s 0s 1s")
-			srv.process.SendText("/title @a title {\"text\": \"Server is shutting down\"}")
+			srv.process.SendText("title @a times 1s 0s 1s")
+			srv.process.SendText("title @a title {\"text\": \"Server is shutting down\"}")
 			time.Sleep(time.Second)
 		}
 
